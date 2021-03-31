@@ -12,9 +12,10 @@ logger = logging.getLogger(__name__)
 
 class ProxyServer:
     def __init__(self, config):
-        self.__max_recv_len = 8192
+        self.__max_recv_len = 1024
         self.__default_socket_timeout = 1
-        self.__dest_connection_timeout = 10
+        self.__dest_connection_timeout = 1
+        self.__max_redirect_timeout = 10 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
@@ -47,15 +48,14 @@ class ProxyServer:
         self.server_socket.close()
 
     def proxy_thread(self, src_socket, src_address):
-        while True:
-            http_response = self.redirect(src_socket, src_address)
-            if http_response.status_code not in ["301"]:
-                break
+        self.redirect(src_socket, src_address)
         try:
+            logger.debug("Shutdown src socket")
             src_socket.shutdown(socket.SHUT_RDWR)
         except socket.timeout:
             pass
         try:
+            logger.debug("Close src socket")
             src_socket.close()
         except socket.timeout:
             pass
@@ -73,7 +73,7 @@ class ProxyServer:
         dest_url = http_request.request_target
         logger.info(f"{src_address[0]}:{src_address[1]} -> {dest_url}")
 
-        logger.debug(http_request)
+        logger.debug(f"HTTP request: {http_request}")
         is_https_tunnel = False
         if http_request.method == "CONNECT":
             is_https_tunnel = True
@@ -81,52 +81,27 @@ class ProxyServer:
         # parse url
         dest_domain, dest_port = self._parse_dest_url(dest_url)
         dest_socket = self.get_dest_socket(dest_domain, dest_port)
-        # dest_socket = self.get_dest_socket("996710a50482.ngrok.io", 80)
-
-        # dest_socket.sendall(
-        #     b'GET http://996710a50482.ngrok.io/ HTTP/1.1\r\nHost: 996710a50482.ngrok.io\r\nUser-Agent: Chrome\r\nAccept-Encoding: gzip, deflate\r\nAccept: */*\r\nConnection: keep-alive\r\n\r\n'
-        # )
 
         if is_https_tunnel:
             src_socket.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
-            request = src_socket.recv(self.__max_recv_len)
-
-        logger.debug(f"Request: {request}")
-        dest_socket.sendall(request)
+        else:
+            logger.debug(f"Request: {request}")
+            dest_socket.sendall(request)
 
         # redirect data
-        response_data = b""
-        while True:
-            try:
-                d_to_s_response_data = self.redirect_socket_data(dest_socket, src_socket)
-                logger.debug(f"Dest to src Response: {d_to_s_response_data}")
-            except:
-                break
-            try:
-                s_to_d_response_data = self.redirect_socket_data(src_socket, dest_socket)
-                logger.debug(f"Src to dest Response: {s_to_d_response_data}")
-            except:
-                break
-            if d_to_s_response_data != b"":
-                response_data = d_to_s_response_data
-            if not s_to_d_response_data and not d_to_s_response_data:
-                break
+        response_data = self.redirect_data(src_socket, dest_socket)
         logger.debug(f"Response: {response_data}")
-        
-        if is_https_tunnel:
-            http_response = HTTPResponse()
-        else:
-            http_response = http_response_parse(response_data)
 
         try:
+            logger.debug("Shutdown dest socket")
             dest_socket.shutdown(socket.SHUT_RDWR)
         except socket.timeout:
             pass
         try:
+            logger.debug("Close dest socket")
             dest_socket.close()
         except socket.timeout:
             pass
-        return http_response
 
     def shutdown(self, singal, frame):
         self.__listen_flag = False
@@ -149,17 +124,34 @@ class ProxyServer:
                 port = 80
         return host, port
 
-    def redirect_socket_data(self, src_socket, dest_socket):
+    def redirect_data(self, src_socket, dest_socket):
         response_data = b""
-        while True:
-            try:
-                data = src_socket.recv(self.__max_recv_len)
-            except socket.timeout:
-                data = b""
+        count = 0
+        try:
+            while True:
+                d_to_s_response_data = b""
+                s_to_d_response_data = b""
+                try:
+                    d_to_s_response_data = dest_socket.recv(self.__max_recv_len)
+                    src_socket.sendall(d_to_s_response_data)
+                except socket.error as err:
+                    pass
+                try:
+                    s_to_d_response_data = src_socket.recv(self.__max_recv_len)
+                    dest_socket.sendall(s_to_d_response_data)
+                except socket.error as err:
+                    pass
 
-            if data:
-                response_data += data
-                dest_socket.send(data)
-            else:
-                break
+                if d_to_s_response_data != b"":
+                    response_data += d_to_s_response_data
+                if d_to_s_response_data == b"" and s_to_d_response_data == b"":
+                    count += 1
+                    if count >= self.__max_redirect_timeout:
+                        break
+                else:
+                    count = 0
+        except Exception as err:
+            logger.warning(f"Redirect data warning: {err}")
+            response_data = b""
+        
         return response_data
