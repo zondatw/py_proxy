@@ -27,15 +27,15 @@ class HTTPRequest:
         request_block.reverse()
 
         # start line
-        start_line = request_block.pop().decode()
+        start_line = request_block.pop().decode(errors="ignore")
         self.method, self.request_target, self.http_version = start_line.split(" ")
 
         # header
-        header_field = request_block.pop().decode()
+        header_field = request_block.pop().decode(errors="ignore")
         while header_field != "":
             field_name, field_value = header_field.split(": ")
             self.header.__setattr__(field_name, field_value)
-            header_field = request_block.pop().decode()
+            header_field = request_block.pop().decode(errors="ignore")
 
         # body
         self.body = request_block.pop()
@@ -63,18 +63,18 @@ class HTTPResponse:
         response_block.reverse()
 
         # start line
-        start_line = response_block.pop().decode()
+        start_line = response_block.pop().decode(errors="ignore")
         start_line_block = start_line.split(" ")
         self.http_version = start_line_block[0]
         self.status_code = start_line_block[1]
         self.status_msg = " ".join(start_line_block[2:])
 
         # header
-        header_field = response_block.pop().decode()
+        header_field = response_block.pop().decode(errors="ignore")
         while header_field != "":
             field_name, field_value = header_field.split(": ")
             self.header.__setattr__(field_name, field_value)
-            header_field = response_block.pop().decode()
+            header_field = response_block.pop().decode(errors="ignore")
 
         # body
         self.body = response_block.pop()

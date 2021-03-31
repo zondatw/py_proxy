@@ -3,7 +3,7 @@ import logging
 from proxy.server import ProxyServer
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     datefmt="%Y-%m-%d %H:%M:%S",
     format="%(asctime)15s %(levelname)-8s %(message)s",
 )
