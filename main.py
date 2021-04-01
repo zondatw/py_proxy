@@ -15,12 +15,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--domain", help="Domain name", default="127.0.0.1", type=str)
     parser.add_argument("-p", "--port", help="Bind port", default=8080, type=int)
+    parser.add_argument(
+        "--allowed_access",
+        help="if using it, could only access what you set. "
+             "when allow all port, please input '*'",
+        action="append",
+        nargs=2,
+        metavar=("ip", "port"),
+        default=[],
+    )
 
     args = parser.parse_args()
 
     config = {
-        "HOST_NAME": args.domain,
-        "BIND_PORT": args.port,
+        "domain": args.domain,
+        "port": args.port,
+        "allowed_accesses": args.allowed_access
     }
-    ProxyServer(config).listen()
+    logger.debug(f"Proxy setting: {config}")
+    ProxyServer(**config).listen()
 

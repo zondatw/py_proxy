@@ -1,8 +1,11 @@
+import ipaddress
 import signal
 import socket
+import inspect
 import ssl
 import threading
 import logging
+from typing import List
 from urllib.parse import urlparse
 
 from proxy.http import http_request_parse, http_response_parse, HTTPResponse
@@ -11,12 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 class ProxyServer:
-    def __init__(self, config):
-        self.__max_recv_len = 1024
+    def __init__(self, domain: str, port: str, allowed_accesses: List[List] =[]):
+        self.__max_recv_len = 1024 * 10
         self.__default_socket_timeout = 1
         self.__dest_connection_timeout = 1
-        self.__max_redirect_timeout = 10 // self.__dest_connection_timeout // 2
+        self.__max_redirect_timeout = 2 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
+        self.__enable_allowed_access = True if allowed_accesses != [] else False
+
+        if self.__enable_allowed_access:
+            # format: {ipaddress.ip_network: port}
+            self.allowed_accesses = self.__init_allowed_accesses(allowed_accesses)
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
 
@@ -27,9 +35,10 @@ class ProxyServer:
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-        self.server_socket.bind((config["HOST_NAME"], config["BIND_PORT"]))
+        self.server_socket.bind((domain, port))
         
-        self.server_socket.listen(10)
+        self.server_socket.listen(100)
+        logger.info(f"Proxy server: {domain}:{port}")
 
     def listen(self):
         while self.__listen_flag:
@@ -37,6 +46,13 @@ class ProxyServer:
                 (client_socket, client_address) = self.server_socket.accept() 
             except socket.timeout:
                 continue
+
+            logger.debug(f"Get new connect: {client_address}")
+            if self.__enable_allowed_access:
+                if not self.is_connection_allowed(client_address[0], client_address[1]):
+                    logger.warning(f"Not allowed client: {client_address}")
+                    client_socket.close()
+                    continue
 
             client_thread = threading.Thread(
                 name=self._get_client_name(client_address),
@@ -47,7 +63,7 @@ class ProxyServer:
             client_thread.start()
         self.server_socket.close()
 
-    def proxy_thread(self, src_socket, src_address):
+    def proxy_thread(self, src_socket: socket, src_address: tuple):
         self.redirect(src_socket, src_address)
         try:
             logger.debug("Shutdown src socket")
@@ -60,13 +76,13 @@ class ProxyServer:
         except socket.timeout:
             pass
 
-    def get_dest_socket(self, dest_domain, dest_port):
+    def get_dest_socket(self, dest_domain: str, dest_port: str) -> socket:
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         dest_socket.connect((dest_domain, dest_port))
         dest_socket.settimeout(self.__dest_connection_timeout)
         return dest_socket
 
-    def redirect(self, src_socket, src_address):
+    def redirect(self, src_socket: socket, src_address: tuple()):
         request = src_socket.recv(self.__max_recv_len)
         logger.debug(request)
         http_request = http_request_parse(request)
@@ -103,14 +119,14 @@ class ProxyServer:
         except socket.timeout:
             pass
 
-    def shutdown(self, singal, frame):
+    def shutdown(self, singal_handler: signal.Signals, frame: inspect.types.FrameType):
         self.__listen_flag = False
         exit(0)
 
-    def _get_client_name(self, address):
+    def _get_client_name(self, address: str) -> str:
         return f"proxy_{address}"
 
-    def _parse_dest_url(self, dest_url):
+    def _parse_dest_url(self, dest_url: str) -> (str, str):
         if "://" not in dest_url and ":443" in dest_url:
             dest_url = f"https://{dest_url}"
 
@@ -124,7 +140,7 @@ class ProxyServer:
                 port = 80
         return host, port
 
-    def redirect_data(self, src_socket, dest_socket):
+    def redirect_data(self, src_socket: socket, dest_socket: socket) -> bin:
         response_data = b""
         count = 0
         try:
@@ -155,3 +171,18 @@ class ProxyServer:
             response_data = b""
         
         return response_data
+
+    def __init_allowed_accesses(self, allowed_access: List[List]) -> dict:
+        allowed_accesses = {}
+        for ip_adr, port in allowed_access:
+            allowed_accesses[ipaddress.ip_network(ip_adr)] = str(port)
+        logger.debug(f"Initial allowed accessed: {allowed_accesses}")
+        return allowed_accesses
+
+    def is_connection_allowed(self, host: str, port: int) -> bool:
+        tested_ip_address = ipaddress.ip_network(host)
+        for allowed_ip_address, allowed_port in self.allowed_accesses.items():
+            if allowed_ip_address.supernet_of(tested_ip_address) and (allowed_port == "*" or str(port) == allowed_port):
+                return True
+        else:
+            return False
