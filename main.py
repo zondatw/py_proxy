@@ -24,13 +24,24 @@ if __name__ == "__main__":
         metavar=("ip", "port"),
         default=[],
     )
+    parser.add_argument(
+        "--blocked_access",
+        help="if using it, will block access what you set. "
+             "when block all port, please input '*'. "
+             "Note: this setting has higher priority than allowed_access",
+        action="append",
+        nargs=2,
+        metavar=("ip", "port"),
+        default=[],
+    )
 
     args = parser.parse_args()
 
     config = {
         "domain": args.domain,
         "port": args.port,
-        "allowed_accesses": args.allowed_access
+        "allowed_accesses": args.allowed_access,
+        "blocked_accesses": args.blocked_access,
     }
     logger.debug(f"Proxy setting: {config}")
     ProxyServer(**config).listen()

@@ -14,17 +14,28 @@ logger = logging.getLogger(__name__)
 
 
 class ProxyServer:
-    def __init__(self, domain: str, port: str, allowed_accesses: List[List] =[]):
+    def __init__(
+        self,
+        domain: str,
+        port: str,
+        allowed_accesses: List[List] =[],
+        blocked_accesses: List[List] =[],
+    ):
         self.__max_recv_len = 1024 * 10
         self.__default_socket_timeout = 1
         self.__dest_connection_timeout = 1
         self.__max_redirect_timeout = 2 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
         self.__enable_allowed_access = True if allowed_accesses != [] else False
+        self.__enable_blocked_access = True if blocked_accesses != [] else False
 
         if self.__enable_allowed_access:
             # format: {ipaddress.ip_network: port}
             self.allowed_accesses = self.__init_allowed_accesses(allowed_accesses)
+
+        if self.__enable_blocked_access:
+            # format: {ipaddress.ip_network: port}
+            self.blocked_accesses = self.__init_blocked_accesses(allowed_accesses)
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
 
@@ -48,6 +59,11 @@ class ProxyServer:
                 continue
 
             logger.debug(f"Get new connect: {client_address}")
+            if self.__enable_blocked_access:
+                if self.is_connection_blocked(client_address[0], client_address[1]):
+                    logger.warning(f"Blocked client: {client_address}")
+                    client_socket.close()
+                    continue
             if self.__enable_allowed_access:
                 if not self.is_connection_allowed(client_address[0], client_address[1]):
                     logger.warning(f"Not allowed client: {client_address}")
@@ -173,16 +189,31 @@ class ProxyServer:
         return response_data
 
     def __init_allowed_accesses(self, allowed_access: List[List]) -> dict:
-        allowed_accesses = {}
-        for ip_adr, port in allowed_access:
-            allowed_accesses[ipaddress.ip_network(ip_adr)] = str(port)
+        allowed_accesses = self.__get_init_access_table(allowed_access)
         logger.debug(f"Initial allowed accessed: {allowed_accesses}")
         return allowed_accesses
 
+    def __init_blocked_accesses(self, blocked_access: List[List]) -> dict:
+        blocked_accesses = self.__get_init_access_table(blocked_access)
+        logger.debug(f"Initial blocked accessed: {blocked_accesses}")
+        return blocked_accesses
+
+    def __get_init_access_table(self, access_list: List[List]) -> dict:
+        accesses = {}
+        for ip_adr, port in access_list:
+            accesses[ipaddress.ip_network(ip_adr)] = str(port)
+        return accesses
+
     def is_connection_allowed(self, host: str, port: int) -> bool:
+        return self.is_testee_in_access_table(self.allowed_accesses, host, port)
+
+    def is_connection_blocked(self, host: str, port: int) -> bool:
+        return self.is_testee_in_access_table(self.blocked_accesses, host, port)
+    
+    def is_testee_in_access_table(self, accesses: dict, host: str, port: int) -> bool:
         tested_ip_address = ipaddress.ip_network(host)
-        for allowed_ip_address, allowed_port in self.allowed_accesses.items():
-            if allowed_ip_address.supernet_of(tested_ip_address) and (allowed_port == "*" or str(port) == allowed_port):
+        for access_ip_address, access_port in accesses.items():
+            if access_ip_address.supernet_of(tested_ip_address) and (access_port == "*" or str(port) == access_port):
                 return True
         else:
             return False
