@@ -16,4 +16,4 @@ Example:
  * 127.0.0.1, mask: 255.255.255.255, port 8080
  * 127.0.0.0, mask: 255.255.255.0, port: all
 
-`$ python main.py --allowed_access 127.0.1.1 8080 --allowed_access 127.0.0.0/24 *
+`$ python main.py --allowed_access 127.0.1.1 8080 --allowed_access 127.0.0.0/24 *`
