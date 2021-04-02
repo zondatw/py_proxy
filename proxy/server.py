@@ -16,15 +16,15 @@ logger = logging.getLogger(__name__)
 class ProxyServer:
     def __init__(
         self,
-        domain: str,
+        url: str,
         port: str,
         allowed_accesses: List[List] =[],
         blocked_accesses: List[List] =[],
     ):
-        self.__max_recv_len = 1024 * 10
+        self.__max_recv_len = 1024 * 1024 * 1
         self.__default_socket_timeout = 1
         self.__dest_connection_timeout = 1
-        self.__max_redirect_timeout = 2 // self.__dest_connection_timeout // 2
+        self.__max_redirect_timeout = 4 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
         self.__enable_allowed_access = True if allowed_accesses != [] else False
         self.__enable_blocked_access = True if blocked_accesses != [] else False
@@ -46,10 +46,10 @@ class ProxyServer:
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-        self.server_socket.bind((domain, port))
+        self.server_socket.bind((url, port))
         
         self.server_socket.listen(100)
-        logger.info(f"Proxy server: {domain}:{port}")
+        logger.info(f"Proxy server: {url}:{port}")
 
     def listen(self):
         while self.__listen_flag:
@@ -80,7 +80,34 @@ class ProxyServer:
         self.server_socket.close()
 
     def proxy_thread(self, src_socket: socket, src_address: tuple):
-        self.redirect(src_socket, src_address)
+        request = src_socket.recv(self.__max_recv_len)
+        logger.debug(request)
+        http_request = http_request_parse(request)
+        dest_url = http_request.request_target
+        logger.info(f"{src_address[0]}:{src_address[1]} -> {dest_url}")
+
+        logger.debug(f"HTTP request: {http_request}")
+        is_https_tunnel = False
+        if http_request.method == "CONNECT":
+            is_https_tunnel = True
+
+        # parse url
+        dest_domain, dest_port = self._parse_dest_url(dest_url)
+        dest_socket = self.get_dest_socket(dest_domain, dest_port)
+
+        self.redirect(src_socket, request, dest_socket, is_https_tunnel)
+
+        try:
+            logger.debug("Shutdown dest socket")
+            dest_socket.shutdown(socket.SHUT_RDWR)
+        except socket.timeout:
+            pass
+        try:
+            logger.debug("Close dest socket")
+            dest_socket.close()
+        except socket.timeout:
+            pass
+
         try:
             logger.debug("Shutdown src socket")
             src_socket.shutdown(socket.SHUT_RDWR)
@@ -98,22 +125,7 @@ class ProxyServer:
         dest_socket.settimeout(self.__dest_connection_timeout)
         return dest_socket
 
-    def redirect(self, src_socket: socket, src_address: tuple()):
-        request = src_socket.recv(self.__max_recv_len)
-        logger.debug(request)
-        http_request = http_request_parse(request)
-        dest_url = http_request.request_target
-        logger.info(f"{src_address[0]}:{src_address[1]} -> {dest_url}")
-
-        logger.debug(f"HTTP request: {http_request}")
-        is_https_tunnel = False
-        if http_request.method == "CONNECT":
-            is_https_tunnel = True
-
-        # parse url
-        dest_domain, dest_port = self._parse_dest_url(dest_url)
-        dest_socket = self.get_dest_socket(dest_domain, dest_port)
-
+    def redirect(self, src_socket: socket, request: bin, dest_socket: socket, is_https_tunnel: bool):
         if is_https_tunnel:
             src_socket.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
         else:
@@ -123,17 +135,6 @@ class ProxyServer:
         # redirect data
         response_data = self.redirect_data(src_socket, dest_socket)
         logger.debug(f"Response: {response_data}")
-
-        try:
-            logger.debug("Shutdown dest socket")
-            dest_socket.shutdown(socket.SHUT_RDWR)
-        except socket.timeout:
-            pass
-        try:
-            logger.debug("Close dest socket")
-            dest_socket.close()
-        except socket.timeout:
-            pass
 
     def shutdown(self, singal_handler: signal.Signals, frame: inspect.types.FrameType):
         self.__listen_flag = False
