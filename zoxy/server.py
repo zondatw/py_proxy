@@ -9,7 +9,7 @@ from collections import defaultdict
 from typing import List
 from urllib.parse import urlparse
 
-from proxy.http import http_request_parse, http_response_parse, HTTPResponse
+from .http import http_request_parse, http_response_parse, HTTPResponse
 
 logger = logging.getLogger(__name__)
 
