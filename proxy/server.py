@@ -24,7 +24,7 @@ class ProxyServer:
         self.__max_recv_len = 1024 * 1024 * 1
         self.__default_socket_timeout = 1
         self.__dest_connection_timeout = 1
-        self.__max_redirect_timeout = 4 // self.__dest_connection_timeout // 2
+        self.__max_pipe_timeout = 4 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
         self.__enable_allowed_access = True if allowed_accesses != [] else False
         self.__enable_blocked_access = True if blocked_accesses != [] else False
@@ -35,7 +35,7 @@ class ProxyServer:
 
         if self.__enable_blocked_access:
             # format: {ipaddress.ip_network: port}
-            self.blocked_accesses = self.__init_blocked_accesses(allowed_accesses)
+            self.blocked_accesses = self.__init_blocked_accesses(blocked_accesses)
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
 
@@ -95,7 +95,7 @@ class ProxyServer:
         dest_domain, dest_port = self._parse_dest_url(dest_url)
         dest_socket = self.get_dest_socket(dest_domain, dest_port)
 
-        self.redirect(src_socket, request, dest_socket, is_https_tunnel)
+        self.pipe(src_socket, request, dest_socket, is_https_tunnel)
 
         try:
             logger.debug("Shutdown dest socket")
@@ -125,15 +125,15 @@ class ProxyServer:
         dest_socket.settimeout(self.__dest_connection_timeout)
         return dest_socket
 
-    def redirect(self, src_socket: socket, request: bin, dest_socket: socket, is_https_tunnel: bool):
+    def pipe(self, src_socket: socket, request: bin, dest_socket: socket, is_https_tunnel: bool):
         if is_https_tunnel:
             src_socket.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
         else:
             logger.debug(f"Request: {request}")
             dest_socket.sendall(request)
 
-        # redirect data
-        response_data = self.redirect_data(src_socket, dest_socket)
+        # pipe data
+        response_data = self.pipe_data(src_socket, dest_socket)
         logger.debug(f"Response: {response_data}")
 
     def shutdown(self, singal_handler: signal.Signals, frame: inspect.types.FrameType):
@@ -157,7 +157,7 @@ class ProxyServer:
                 port = 80
         return host, port
 
-    def redirect_data(self, src_socket: socket, dest_socket: socket) -> bin:
+    def pipe_data(self, src_socket: socket, dest_socket: socket) -> bin:
         response_data = b""
         count = 0
         try:
@@ -179,12 +179,12 @@ class ProxyServer:
                     response_data += d_to_s_response_data
                 if d_to_s_response_data == b"" and s_to_d_response_data == b"":
                     count += 1
-                    if count >= self.__max_redirect_timeout:
+                    if count >= self.__max_pipe_timeout:
                         break
                 else:
                     count = 0
         except Exception as err:
-            logger.warning(f"Redirect data warning: {err}")
+            logger.warning(f"Pipe data warning: {err}")
             response_data = b""
         
         return response_data

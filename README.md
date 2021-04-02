@@ -5,7 +5,7 @@
 Default server path: 127.0.0.1:8080  
 `$ python main.py`
 
-### Coustomize url and port
+### Customize url and port
 
 Example: 0.0.0.0:9999  
 `$ python main -u 0.0.0.0 -p 9999`
