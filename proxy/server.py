@@ -5,6 +5,7 @@ import inspect
 import ssl
 import threading
 import logging
+from collections import defaultdict
 from typing import List
 from urllib.parse import urlparse
 
@@ -30,11 +31,11 @@ class ProxyServer:
         self.__enable_blocked_access = True if blocked_accesses != [] else False
 
         if self.__enable_allowed_access:
-            # format: {ipaddress.ip_network: port}
+            # format: {ipaddress.ip_network: [port]}
             self.allowed_accesses = self.__init_allowed_accesses(allowed_accesses)
 
         if self.__enable_blocked_access:
-            # format: {ipaddress.ip_network: port}
+            # format: {ipaddress.ip_network: [port]}
             self.blocked_accesses = self.__init_blocked_accesses(blocked_accesses)
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
@@ -189,20 +190,20 @@ class ProxyServer:
         
         return response_data
 
-    def __init_allowed_accesses(self, allowed_access: List[List]) -> dict:
+    def __init_allowed_accesses(self, allowed_access: List[List]) -> defaultdict(list):
         allowed_accesses = self.__get_init_access_table(allowed_access)
         logger.debug(f"Initial allowed accessed: {allowed_accesses}")
         return allowed_accesses
 
-    def __init_blocked_accesses(self, blocked_access: List[List]) -> dict:
+    def __init_blocked_accesses(self, blocked_access: List[List]) -> defaultdict(list):
         blocked_accesses = self.__get_init_access_table(blocked_access)
         logger.debug(f"Initial blocked accessed: {blocked_accesses}")
         return blocked_accesses
 
-    def __get_init_access_table(self, access_list: List[List]) -> dict:
-        accesses = {}
+    def __get_init_access_table(self, access_list: List[List]) -> defaultdict(list):
+        accesses = defaultdict(list)
         for ip_adr, port in access_list:
-            accesses[ipaddress.ip_network(ip_adr)] = str(port)
+            accesses[ipaddress.ip_network(ip_adr)].append(str(port))
         return accesses
 
     def is_connection_allowed(self, host: str, port: int) -> bool:
@@ -213,8 +214,9 @@ class ProxyServer:
     
     def is_testee_in_access_table(self, accesses: dict, host: str, port: int) -> bool:
         tested_ip_address = ipaddress.ip_network(host)
-        for access_ip_address, access_port in accesses.items():
-            if access_ip_address.supernet_of(tested_ip_address) and (access_port == "*" or str(port) == access_port):
-                return True
+        for access_ip_address, access_port_list in accesses.items():
+            for access_port in access_port_list:
+                if access_ip_address.supernet_of(tested_ip_address) and (access_port == "*" or str(port) == access_port):
+                    return True
         else:
             return False
