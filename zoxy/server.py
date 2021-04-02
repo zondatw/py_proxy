@@ -109,18 +109,23 @@ class ProxyServer:
         if self.__enable_forwarding:
             dest_domain, dest_port = self.get_forwarding_dest(dest_domain, dest_port)
 
-        dest_socket = self.get_dest_socket(dest_domain, dest_port)
-
-        self.pipe(src_socket, request, dest_socket, is_https_tunnel)
+        dest_socket = None
+        try:
+            dest_socket = self.get_dest_socket(dest_domain, dest_port)
+            self.pipe(src_socket, request, dest_socket, is_https_tunnel)
+        except socket.timeout:
+            pass
 
         try:
             logger.debug("Shutdown dest socket")
-            dest_socket.shutdown(socket.SHUT_RDWR)
+            if dest_socket:
+                dest_socket.shutdown(socket.SHUT_RDWR)
         except socket.timeout:
             pass
         try:
             logger.debug("Close dest socket")
-            dest_socket.close()
+            if dest_socket:
+                dest_socket.close()
         except socket.timeout:
             pass
 
@@ -183,12 +188,12 @@ class ProxyServer:
                 try:
                     d_to_s_response_data = dest_socket.recv(self.__max_recv_len)
                     src_socket.sendall(d_to_s_response_data)
-                except socket.error as err:
+                except (socket.error, socket.timeout) as err:
                     pass
                 try:
                     s_to_d_response_data = src_socket.recv(self.__max_recv_len)
                     dest_socket.sendall(s_to_d_response_data)
-                except socket.error as err:
+                except (socket.error, socket.timeout) as err:
                     pass
 
                 if d_to_s_response_data != b"":
