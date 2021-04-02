@@ -4,7 +4,7 @@ import logging
 from proxy.server import ProxyServer
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     datefmt="%Y-%m-%d %H:%M:%S",
     format="%(asctime)15s %(levelname)-8s %(message)s",
 )
@@ -21,7 +21,7 @@ if __name__ == "__main__":
              "when allow all port, please input '*'",
         action="append",
         nargs=2,
-        metavar=("ip", "port"),
+        metavar=("ip/mask", "port"),
         default=[],
     )
     parser.add_argument(
@@ -31,7 +31,15 @@ if __name__ == "__main__":
              "Note: this setting has higher priority than allowed_access",
         action="append",
         nargs=2,
-        metavar=("ip", "port"),
+        metavar=("ip/mask", "port"),
+        default=[],
+    )
+    parser.add_argument(
+        "--forwarding",
+        help="forward a to b",
+        action="append",
+        nargs=4,
+        metavar=("original ip/mask", "original port", "destination ip", "destination port"),
         default=[],
     )
 
@@ -42,6 +50,7 @@ if __name__ == "__main__":
         "port": args.port,
         "allowed_accesses": args.allowed_access,
         "blocked_accesses": args.blocked_access,
+        "forwarding": args.forwarding,
     }
     logger.debug(f"Proxy setting: {config}")
     ProxyServer(**config).listen()

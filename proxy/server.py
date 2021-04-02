@@ -21,6 +21,7 @@ class ProxyServer:
         port: str,
         allowed_accesses: List[List] =[],
         blocked_accesses: List[List] =[],
+        forwarding: List[List] =[],
     ):
         self.__max_recv_len = 1024 * 1024 * 1
         self.__default_socket_timeout = 1
@@ -29,6 +30,7 @@ class ProxyServer:
         self.__listen_flag = True
         self.__enable_allowed_access = True if allowed_accesses != [] else False
         self.__enable_blocked_access = True if blocked_accesses != [] else False
+        self.__enable_forwarding = True if forwarding != [] else False
 
         if self.__enable_allowed_access:
             # format: {ipaddress.ip_network: [port]}
@@ -37,6 +39,15 @@ class ProxyServer:
         if self.__enable_blocked_access:
             # format: {ipaddress.ip_network: [port]}
             self.blocked_accesses = self.__init_blocked_accesses(blocked_accesses)
+
+        if self.__enable_forwarding:
+            # format: [{
+            #       "original_ip": ipaddress.ip_network,
+            #       "original_port": str,
+            #       "destination_ip": str,
+            #       "destination_port": str,
+            # }]
+            self.forwarding_list = self.__init_forwarding_list(forwarding)
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
 
@@ -94,6 +105,10 @@ class ProxyServer:
 
         # parse url
         dest_domain, dest_port = self._parse_dest_url(dest_url)
+
+        if self.__enable_forwarding:
+            dest_domain, dest_port = self.get_forwarding_dest(dest_domain, dest_port)
+
         dest_socket = self.get_dest_socket(dest_domain, dest_port)
 
         self.pipe(src_socket, request, dest_socket, is_https_tunnel)
@@ -144,7 +159,7 @@ class ProxyServer:
     def _get_client_name(self, address: str) -> str:
         return f"proxy_{address}"
 
-    def _parse_dest_url(self, dest_url: str) -> (str, str):
+    def _parse_dest_url(self, dest_url: str) -> (str, int):
         if "://" not in dest_url and ":443" in dest_url:
             dest_url = f"https://{dest_url}"
 
@@ -205,6 +220,34 @@ class ProxyServer:
         for ip_adr, port in access_list:
             accesses[ipaddress.ip_network(ip_adr)].append(str(port))
         return accesses
+
+    def __init_forwarding_list(self, forwarding: List[List]) -> List[dict]:
+        forwarding_list = []
+        for original_ip, original_port, destination_ip, destination_port in forwarding:
+            forwarding_list.append({
+                "original_ip": ipaddress.ip_network(original_ip),
+                "original_port": str(original_port),
+                "destination_ip": destination_ip,
+                "destination_port": str(destination_port),
+            })
+        logger.debug(f"Initial forwarding list: {forwarding_list}")
+        return forwarding_list
+
+    def get_forwarding_dest(self, dest_domain: str, dest_port: int) -> (str, int):
+        dest_ip_address = ipaddress.ip_network(socket.gethostbyname(dest_domain))
+        forwarding_domain, forwarding_port = dest_domain, dest_port
+        for forwarding in self.forwarding_list:
+            original_ip = forwarding["original_ip"]
+            original_port = forwarding["original_port"]
+            destination_ip = forwarding["destination_ip"]
+            destination_port = forwarding["destination_port"]
+            if original_ip.supernet_of(dest_ip_address) and (original_port == "*" or str(dest_port) == original_port):
+                if destination_port != "*":
+                    forwarding_port = int(destination_port)
+                forwarding_domain = destination_ip
+                logger.info(f"Forward {dest_domain}:{dest_port} to {forwarding_domain}:{forwarding_port}")
+                break
+        return forwarding_domain, forwarding_port
 
     def is_connection_allowed(self, host: str, port: int) -> bool:
         return self.is_testee_in_access_table(self.allowed_accesses, host, port)
