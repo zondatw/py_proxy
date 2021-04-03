@@ -89,6 +89,9 @@ class ProxyServer:
             )
             client_thread.setDaemon(True)
             client_thread.start()
+        self.close()
+
+    def close(self):
         self.server_socket.close()
 
     def proxy_thread(self, src_socket: socket, src_address: tuple):
