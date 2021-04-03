@@ -1,5 +1,9 @@
 # Zonda Python Proxy
 
+## Install
+
+`pip install zoxy`
+
 ## Quick start for cli
 
 Default server path: 127.0.0.1:8080  
