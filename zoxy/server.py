@@ -1,13 +1,13 @@
 import ipaddress
 import signal
 import socket
-import inspect
 import ssl
 import threading
 import logging
 from collections import defaultdict
-from typing import List
+from typing import List, Tuple, Optional
 from urllib.parse import urlparse
+from types import FrameType
 
 from .http import http_request_parse, http_response_parse, HTTPResponse
 
@@ -71,16 +71,6 @@ class ProxyServer:
                 continue
 
             logger.debug(f"Get new connect: {client_address}")
-            if self.__enable_blocked_access:
-                if self.is_connection_blocked(client_address[0], client_address[1]):
-                    logger.warning(f"Blocked client: {client_address}")
-                    client_socket.close()
-                    continue
-            if self.__enable_allowed_access:
-                if not self.is_connection_allowed(client_address[0], client_address[1]):
-                    logger.warning(f"Not allowed client: {client_address}")
-                    client_socket.close()
-                    continue
 
             client_thread = threading.Thread(
                 name=self._get_client_name(client_address),
@@ -94,7 +84,18 @@ class ProxyServer:
     def close(self):
         self.server_socket.close()
 
-    def proxy_thread(self, src_socket: socket, src_address: tuple):
+    def proxy_thread(self, src_socket: socket.socket, src_address: tuple):
+        if self.__enable_blocked_access:
+            if self.is_connection_blocked(src_address[0], src_address[1]):
+                logger.warning(f"Blocked client: {src_address}")
+                src_socket.close()
+                return
+        if self.__enable_allowed_access:
+            if not self.is_connection_allowed(src_address[0], src_address[1]):
+                logger.warning(f"Not allowed client: {src_address}")
+                src_socket.close()
+                return
+
         request = src_socket.recv(self.__max_recv_len)
         logger.debug(request)
         http_request = http_request_parse(request)
@@ -143,31 +144,31 @@ class ProxyServer:
         except socket.timeout:
             pass
 
-    def get_dest_socket(self, dest_domain: str, dest_port: str) -> socket:
+    def get_dest_socket(self, dest_domain: Optional[str], dest_port: Optional[int]) -> socket.socket:
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         dest_socket.connect((dest_domain, dest_port))
         dest_socket.settimeout(self.__dest_connection_timeout)
         return dest_socket
 
-    def pipe(self, src_socket: socket, request: bin, dest_socket: socket, is_https_tunnel: bool):
+    def pipe(self, src_socket: socket.socket, request: bytes, dest_socket: socket.socket, is_https_tunnel: bool):
         if is_https_tunnel:
             src_socket.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
         else:
-            logger.debug(f"Request: {request}")
+            logger.debug(f"Request: {str(request)}")
             dest_socket.sendall(request)
 
         # pipe data
         response_data = self.pipe_data(src_socket, dest_socket)
-        logger.debug(f"Response: {response_data}")
+        logger.debug(f"Response: {str(response_data)}")
 
-    def shutdown(self, singal_handler: signal.Signals, frame: inspect.types.FrameType):
+    def shutdown(self, singal_handler: signal.Signals, frame: FrameType):
         self.__listen_flag = False
         exit(0)
 
     def _get_client_name(self, address: str) -> str:
         return f"proxy_{address}"
 
-    def _parse_dest_url(self, dest_url: str) -> (str, int):
+    def _parse_dest_url(self, dest_url: str) -> Tuple[Optional[str], Optional[int]]:
         if "://" not in dest_url and ":443" in dest_url:
             dest_url = f"https://{dest_url}"
 
@@ -183,7 +184,7 @@ class ProxyServer:
                 port = 443
         return host, port
 
-    def pipe_data(self, src_socket: socket, dest_socket: socket) -> bin:
+    def pipe_data(self, src_socket: socket.socket, dest_socket: socket.socket) -> bytes:
         response_data = b""
         count = 0
         try:
@@ -215,17 +216,17 @@ class ProxyServer:
         
         return response_data
 
-    def __init_allowed_accesses(self, allowed_access: List[List]) -> defaultdict(list):
+    def __init_allowed_accesses(self, allowed_access: List[List]) -> defaultdict:
         allowed_accesses = self.__get_init_access_table(allowed_access)
         logger.debug(f"Initial allowed accessed: {allowed_accesses}")
         return allowed_accesses
 
-    def __init_blocked_accesses(self, blocked_access: List[List]) -> defaultdict(list):
+    def __init_blocked_accesses(self, blocked_access: List[List]) -> defaultdict:
         blocked_accesses = self.__get_init_access_table(blocked_access)
         logger.debug(f"Initial blocked accessed: {blocked_accesses}")
         return blocked_accesses
 
-    def __get_init_access_table(self, access_list: List[List]) -> defaultdict(list):
+    def __get_init_access_table(self, access_list: List[List]) -> defaultdict:
         accesses = defaultdict(list)
         for ip_adr, port in access_list:
             accesses[ipaddress.ip_network(ip_adr)].append(str(port))
@@ -243,8 +244,8 @@ class ProxyServer:
         logger.debug(f"Initial forwarding list: {forwarding_list}")
         return forwarding_list
 
-    def get_forwarding_dest(self, dest_domain: str, dest_port: int) -> (str, int):
-        dest_ip_address = ipaddress.ip_network(socket.gethostbyname(dest_domain))
+    def get_forwarding_dest(self, dest_domain: Optional[str], dest_port: Optional[int]) -> Tuple[Optional[str], Optional[int]]:
+        dest_ip_address = ipaddress.ip_network(socket.gethostbyname(str(dest_domain)))
         forwarding_domain, forwarding_port = dest_domain, dest_port
         for forwarding in self.forwarding_list:
             original_ip = forwarding["original_ip"]

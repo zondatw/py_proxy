@@ -69,3 +69,13 @@ config = {
 }
 zoxy.server.ProxyServer(**config).listen()
 ```
+
+## Developer
+
+### Test
+
+`python -m unittest`
+
+### Type checking
+
+`mypy zoxy`
