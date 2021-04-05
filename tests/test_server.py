@@ -74,3 +74,92 @@ class ServerSocketTest(unittest.TestCase):
         self.assertEqual(mock_dest_socket.sendall.call_args_list, [call(data) for data in test_src_data])
         self.assertEqual(b"".join(test_dest_data), response_data)
 
+class ServerTest(unittest.TestCase):
+    def setUp(self):
+        self.config = {
+            "url": "0.0.0.0",
+            "port": 9999,
+            "allowed_accesses": [
+                ["127.0.1.1", "8080"],
+                ["127.0.2.0/24", "1234"],
+                ["127.0.0.0/24", "*"],
+            ],
+            "blocked_accesses": [
+                ["192.0.1.1", "8080"],
+                ["192.0.2.0/24", "1234"],
+                ["192.0.0.0/24", "*"],
+            ],
+            "forwarding": [
+                ["196.168.2.1", "1234", "127.0.2.1", "8000"],
+                ["196.168.1.0/24", "1234", "127.0.0.1", "8000"],
+                ["196.168.0.0/24", "*", "127.0.0.2", "*"],
+            ],
+        }
+        self.proxy_server = ProxyServer(**self.config)
+
+    def tearDown(self):
+        self.proxy_server.close()
+
+    @patch("zoxy.server.ProxyServer.pipe", return_value=Mock())
+    @patch("zoxy.server.ProxyServer.get_dest_socket", return_value=Mock())
+    def test_proxy_thread(self, mock_get_dest_socket, mock_pipe):
+        mock_src_socket = Mock()
+        src_address = ("127.0.0.1", 8000)
+        mock_src_socket.recv.return_value = (
+            b'POST http://127.1.0.1/ HTTP/1.1\r\n'
+            b'Host: 127.1.0.1\r\n'
+            b'Content-Length: 17\r\n'
+            b'Content-Type: application/json\r\n'
+            b'\r\n'
+            b'{"test": "value"}'
+        )
+        self.proxy_server.proxy_thread(mock_src_socket, src_address)
+        mock_get_dest_socket.assert_called_with("127.1.0.1", 80)
+
+    @patch("zoxy.server.ProxyServer.pipe", return_value=Mock())
+    @patch("zoxy.server.ProxyServer.get_dest_socket", return_value=Mock())
+    def test_proxy_thread_with_not_allowed_access(self, mock_get_dest_socket, mock_pipe):
+        mock_src_socket = Mock()
+        src_address = ("111.0.0.1", 8000)
+        mock_src_socket.recv.return_value = (
+            b'POST http://127.1.0.1/ HTTP/1.1\r\n'
+            b'Host: 127.1.0.1\r\n'
+            b'Content-Length: 17\r\n'
+            b'Content-Type: application/json\r\n'
+            b'\r\n'
+            b'{"test": "value"}'
+        )
+        self.proxy_server.proxy_thread(mock_src_socket, src_address)
+        self.assertEqual(mock_get_dest_socket.call_count, 0)
+
+    @patch("zoxy.server.ProxyServer.pipe", return_value=Mock())
+    @patch("zoxy.server.ProxyServer.get_dest_socket", return_value=Mock())
+    def test_proxy_thread_with_blocked_access(self, mock_get_dest_socket, mock_pipe):
+        mock_src_socket = Mock()
+        src_address = ("192.0.0.1", 8000)
+        mock_src_socket.recv.return_value = (
+            b'POST http://127.1.0.1/ HTTP/1.1\r\n'
+            b'Host: 127.1.0.1\r\n'
+            b'Content-Length: 17\r\n'
+            b'Content-Type: application/json\r\n'
+            b'\r\n'
+            b'{"test": "value"}'
+        )
+        self.proxy_server.proxy_thread(mock_src_socket, src_address)
+        self.assertEqual(mock_get_dest_socket.call_count, 0)
+
+    @patch("zoxy.server.ProxyServer.pipe", return_value=Mock())
+    @patch("zoxy.server.ProxyServer.get_dest_socket", return_value=Mock())
+    def test_proxy_thread_with_forwarding(self, mock_get_dest_socket, mock_pipe):
+        mock_src_socket = Mock()
+        src_address = ("127.0.0.1", 8000)
+        mock_src_socket.recv.return_value = (
+            b'POST http://196.168.0.1/ HTTP/1.1\r\n'
+            b'Host: 196.168.0.1\r\n'
+            b'Content-Length: 17\r\n'
+            b'Content-Type: application/json\r\n'
+            b'\r\n'
+            b'{"test": "value"}'
+        )
+        self.proxy_server.proxy_thread(mock_src_socket, src_address)
+        mock_get_dest_socket.assert_called_with("127.0.0.2", 80)
