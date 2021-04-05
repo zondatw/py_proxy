@@ -28,7 +28,6 @@ class ProxyServer:
         self.__dest_connection_timeout = 1
         self.__max_pipe_timeout = 4 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
-        self.__enable_forwarding = True if forwarding != [] else False
 
         # format: {ipaddress.ip_network: [port]}
         self.allowed_accesses = allowed_accesses
@@ -36,14 +35,13 @@ class ProxyServer:
         # format: {ipaddress.ip_network: [port]}
         self.blocked_accesses = blocked_accesses
 
-        if self.__enable_forwarding:
-            # format: [{
-            #       "original_ip": ipaddress.ip_network,
-            #       "original_port": str,
-            #       "destination_ip": str,
-            #       "destination_port": str,
-            # }]
-            self._forwarding_list = self.__init_forwarding_list(forwarding)
+        # format: [{
+        #       "original_ip": ipaddress.ip_network,
+        #       "original_port": str,
+        #       "destination_ip": str,
+        #       "destination_port": str,
+        # }]
+        self.forwarding = forwarding
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
 
@@ -254,7 +252,20 @@ class ProxyServer:
             accesses[ipaddress.ip_network(ip_adr)].append(str(port))
         return accesses
 
-    def __init_forwarding_list(self, forwarding: List[List]) -> List[dict]:
+    @property
+    def forwarding(self):
+        forwarding = []
+        for forwarding_setting in self._forwarding_list:
+            forwarding.append([
+                str(forwarding_setting["original_ip"]),
+                forwarding_setting["original_port"],
+                forwarding_setting["destination_ip"],
+                forwarding_setting["destination_port"],
+            ])
+        return forwarding
+
+    @forwarding.setter
+    def forwarding(self, forwarding: List[List]):
         forwarding_list = []
         for original_ip, original_port, destination_ip, destination_port in forwarding:
             forwarding_list.append({
@@ -264,7 +275,11 @@ class ProxyServer:
                 "destination_port": str(destination_port),
             })
         logger.debug(f"Initial forwarding list: {forwarding_list}")
-        return forwarding_list
+        self._forwarding_list = forwarding_list
+        if self._forwarding_list:
+            self.__enable_forwarding = True
+        else:
+            self.__enable_forwarding = False
 
     def get_forwarding_dest(self, dest_domain: Optional[str], dest_port: Optional[int]) -> Tuple[Optional[str], Optional[int]]:
         dest_ip_address = ipaddress.ip_network(socket.gethostbyname(str(dest_domain)))
