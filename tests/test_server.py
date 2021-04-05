@@ -1,6 +1,6 @@
 import socket
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
 
 from zoxy.server import ProxyServer
 
@@ -61,4 +61,16 @@ class ServerSocketTest(unittest.TestCase):
         mock_src_socket.sendall.assert_called_with(b"HTTP/1.1 200 Connection established\r\n\r\n")
         mock_pipe_data.assert_called_with(mock_src_socket, mock_dest_socket)
 
-    
+    def test_pipe_data(self):
+        mock_src_socket = Mock()
+        mock_dest_socket = Mock()
+        test_src_data = [b"Test src data\r\n"] + [b""] * self.proxy_server._ProxyServer__max_pipe_timeout
+        test_dest_data = [b"Test dest data\r\n"] + [b""] * self.proxy_server._ProxyServer__max_pipe_timeout
+
+        mock_src_socket.recv.side_effect = iter(test_src_data)
+        mock_dest_socket.recv.side_effect = iter(test_dest_data)
+        response_data = self.proxy_server.pipe_data(mock_src_socket, mock_dest_socket)
+        self.assertEqual(mock_src_socket.sendall.mock_calls, [call(data) for data in test_dest_data])
+        self.assertEqual(mock_dest_socket.sendall.call_args_list, [call(data) for data in test_src_data])
+        self.assertEqual(b"".join(test_dest_data), response_data)
+
