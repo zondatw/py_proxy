@@ -70,6 +70,48 @@ config = {
 zoxy.server.ProxyServer(**config).listen()
 ```
 
+### Get/Set accesses
+
+#### Allowed accesses
+
+```python
+# Get
+proxy_server.allowed_accesses
+'''
+[
+    ["127.0.1.1/32", "8080"],
+    ["127.0.2.0/24", "1234"],
+    ["127.0.0.0/24", "*"],
+]
+'''
+# Set
+proxy_server.allowed_accesses = [
+    ["111.0.1.1", "8080"],
+    ["111.0.2.0/24", "1234"],
+    ["111.0.0.0/24", "*"],
+]
+```
+
+#### Blocked accesses
+
+```python
+# Get
+proxy_server.blocked_accesses
+'''
+[
+    ["192.0.1.1/32", "8080"],
+    ["192.0.2.0/24", "1234"],
+    ["192.0.0.0/24", "*"],
+]
+'''
+# Set
+proxy_server.blocked_accesses = [
+    ["111.0.1.1", "8080"],
+    ["111.0.2.0/24", "1234"],
+    ["111.0.0.0/24", "*"],
+]
+```
+
 ## Developer
 
 ### Test

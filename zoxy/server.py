@@ -28,17 +28,13 @@ class ProxyServer:
         self.__dest_connection_timeout = 1
         self.__max_pipe_timeout = 4 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
-        self.__enable_allowed_access = True if allowed_accesses != [] else False
-        self.__enable_blocked_access = True if blocked_accesses != [] else False
         self.__enable_forwarding = True if forwarding != [] else False
 
-        if self.__enable_allowed_access:
-            # format: {ipaddress.ip_network: [port]}
-            self._allowed_accesses = self.__init_allowed_accesses(allowed_accesses)
+        # format: {ipaddress.ip_network: [port]}
+        self.allowed_accesses = allowed_accesses
 
-        if self.__enable_blocked_access:
-            # format: {ipaddress.ip_network: [port]}
-            self._blocked_accesses = self.__init_blocked_accesses(blocked_accesses)
+        # format: {ipaddress.ip_network: [port]}
+        self.blocked_accesses = blocked_accesses
 
         if self.__enable_forwarding:
             # format: [{
@@ -216,17 +212,43 @@ class ProxyServer:
         
         return response_data
 
-    def __init_allowed_accesses(self, allowed_access: List[List]) -> defaultdict:
-        allowed_accesses = self.__get_init_access_table(allowed_access)
+    @property
+    def allowed_accesses(self) -> List[List]:
+        return self.__get_accesses_list(self._allowed_accesses)
+
+    @allowed_accesses.setter
+    def allowed_accesses(self, allowed_access: List[List]):
+        allowed_accesses = self.__get_access_table(allowed_access)
         logger.debug(f"Initial allowed accessed: {allowed_accesses}")
-        return allowed_accesses
+        self._allowed_accesses = allowed_accesses
+        if self._allowed_accesses:
+            self.__enable_allowed_access = True
+        else:
+            self.__enable_allowed_access = False
 
-    def __init_blocked_accesses(self, blocked_access: List[List]) -> defaultdict:
-        blocked_accesses = self.__get_init_access_table(blocked_access)
+    @property
+    def blocked_accesses(self) -> List[List]:
+        return self.__get_accesses_list(self._blocked_accesses)
+
+    @blocked_accesses.setter
+    def blocked_accesses(self, blocked_access: List[List]) -> defaultdict:
+        blocked_accesses = self.__get_access_table(blocked_access)
         logger.debug(f"Initial blocked accessed: {blocked_accesses}")
-        return blocked_accesses
+        self._blocked_accesses = blocked_accesses
+        if self._blocked_accesses:
+            self.__enable_blocked_access = True
+        else:
+            self.__enable_blocked_access = False
 
-    def __get_init_access_table(self, access_list: List[List]) -> defaultdict:
+    def __get_accesses_list(self, accesses: defaultdict) -> List[List]:
+        accesses_list = []
+        for ip_address, port_list in accesses.items():
+            ip_address_str = str(ip_address)
+            for port in port_list:
+                accesses_list.append([ip_address_str, port])
+        return accesses_list
+
+    def __get_access_table(self, access_list: List[List]) -> defaultdict:
         accesses = defaultdict(list)
         for ip_adr, port in access_list:
             accesses[ipaddress.ip_network(ip_adr)].append(str(port))
