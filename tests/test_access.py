@@ -19,10 +19,6 @@ class ProxyServerAccessTest(unittest.TestCase):
                 ["192.0.2.0/24", "1234"],
                 ["192.0.0.0/24", "*"],
             ],
-            "forwarding": [
-                ["192.168.1.0/24", "1234", "127.0.0.1", "8000"],
-                ["0.0.0.0/0", "*", "127.0.0.2", "*"],
-            ],
         }
         self.proxy_server = ProxyServer(**self.config)
 
