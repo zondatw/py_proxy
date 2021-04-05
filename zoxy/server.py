@@ -34,11 +34,11 @@ class ProxyServer:
 
         if self.__enable_allowed_access:
             # format: {ipaddress.ip_network: [port]}
-            self.allowed_accesses = self.__init_allowed_accesses(allowed_accesses)
+            self._allowed_accesses = self.__init_allowed_accesses(allowed_accesses)
 
         if self.__enable_blocked_access:
             # format: {ipaddress.ip_network: [port]}
-            self.blocked_accesses = self.__init_blocked_accesses(blocked_accesses)
+            self._blocked_accesses = self.__init_blocked_accesses(blocked_accesses)
 
         if self.__enable_forwarding:
             # format: [{
@@ -47,7 +47,7 @@ class ProxyServer:
             #       "destination_ip": str,
             #       "destination_port": str,
             # }]
-            self.forwarding_list = self.__init_forwarding_list(forwarding)
+            self._forwarding_list = self.__init_forwarding_list(forwarding)
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
 
@@ -247,7 +247,7 @@ class ProxyServer:
     def get_forwarding_dest(self, dest_domain: Optional[str], dest_port: Optional[int]) -> Tuple[Optional[str], Optional[int]]:
         dest_ip_address = ipaddress.ip_network(socket.gethostbyname(str(dest_domain)))
         forwarding_domain, forwarding_port = dest_domain, dest_port
-        for forwarding in self.forwarding_list:
+        for forwarding in self._forwarding_list.copy():
             original_ip = forwarding["original_ip"]
             original_port = forwarding["original_port"]
             destination_ip = forwarding["destination_ip"]
@@ -261,14 +261,14 @@ class ProxyServer:
         return forwarding_domain, forwarding_port
 
     def is_connection_allowed(self, host: str, port: int) -> bool:
-        return self.is_testee_in_access_table(self.allowed_accesses, host, port)
+        return self.is_testee_in_access_table(self._allowed_accesses, host, port)
 
     def is_connection_blocked(self, host: str, port: int) -> bool:
-        return self.is_testee_in_access_table(self.blocked_accesses, host, port)
+        return self.is_testee_in_access_table(self._blocked_accesses, host, port)
     
     def is_testee_in_access_table(self, accesses: dict, host: str, port: int) -> bool:
         tested_ip_address = ipaddress.ip_network(host)
-        for access_ip_address, access_port_list in accesses.items():
+        for access_ip_address, access_port_list in accesses.copy().items():
             for access_port in access_port_list:
                 if access_ip_address.supernet_of(tested_ip_address) and (access_port == "*" or str(port) == access_port):
                     return True

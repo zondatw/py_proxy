@@ -31,7 +31,7 @@ class ProxyServerAccessTest(unittest.TestCase):
             })
         forwarding_list = self.proxy_server._ProxyServer__init_forwarding_list(forwarding)
         self.assertListEqual(forwarding_list, checker_forwarding_list)
-        self.assertListEqual(self.proxy_server.forwarding_list, checker_forwarding_list)
+        self.assertListEqual(self.proxy_server._forwarding_list, checker_forwarding_list)
 
     def test_get_forwarding_dest(self):
         forwarding_domain, forwarding_port = self.proxy_server.get_forwarding_dest("196.168.2.1", 1234)

@@ -44,7 +44,7 @@ class ProxyServerAccessTest(unittest.TestCase):
             checker_allowed_accesses[ipaddress.ip_network(ip)].append(str(port))
         allowed_access = self.proxy_server._ProxyServer__init_allowed_accesses(allowed_access_list)
         self.assertDictEqual(allowed_access, checker_allowed_accesses)
-        self.assertDictEqual(self.proxy_server.allowed_accesses, checker_allowed_accesses)
+        self.assertDictEqual(self.proxy_server._allowed_accesses, checker_allowed_accesses)
 
     def test_init_blocked_accesses(self):
         blocked_access_list = self.config["blocked_accesses"]
@@ -53,7 +53,7 @@ class ProxyServerAccessTest(unittest.TestCase):
             checker_blocked_accesses[ipaddress.ip_network(ip)].append(str(port))
         blocked_access = self.proxy_server._ProxyServer__init_blocked_accesses(blocked_access_list)
         self.assertDictEqual(blocked_access, checker_blocked_accesses)
-        self.assertDictEqual(self.proxy_server.blocked_accesses, checker_blocked_accesses)
+        self.assertDictEqual(self.proxy_server._blocked_accesses, checker_blocked_accesses)
 
     def test_is_testee_in_access_table(self):
         access_list = [
