@@ -179,6 +179,8 @@ class ProxyServer:
         if not port:
             if scheme == "http":
                 port = 80
+            elif scheme == "https":
+                port = 443
         return host, port
 
     def pipe_data(self, src_socket: socket, dest_socket: socket) -> bin:
