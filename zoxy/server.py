@@ -90,7 +90,12 @@ class ProxyServer:
                 src_socket.close()
                 return
 
-        request = src_socket.recv(self.__max_recv_len)
+        request = b""
+        while True:
+            try:
+                request += src_socket.recv(self.__max_recv_len)
+            except socket.timeout:
+                break
         logger.debug(request)
         http_request = http_request_parse(request)
         dest_url = http_request.request_target
