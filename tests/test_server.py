@@ -105,14 +105,14 @@ class ServerTest(unittest.TestCase):
     def test_proxy_thread(self, mock_get_dest_socket, mock_pipe):
         mock_src_socket = Mock()
         src_address = ("127.0.0.1", 8000)
-        mock_src_socket.recv.return_value = (
+        mock_src_socket.recv.side_effect = iter([(
             b'POST http://127.1.0.1/ HTTP/1.1\r\n'
             b'Host: 127.1.0.1\r\n'
             b'Content-Length: 17\r\n'
             b'Content-Type: application/json\r\n'
             b'\r\n'
             b'{"test": "value"}'
-        )
+        ), socket.timeout])
         self.proxy_server.proxy_thread(mock_src_socket, src_address)
         mock_get_dest_socket.assert_called_with("127.1.0.1", 80)
 
@@ -121,14 +121,14 @@ class ServerTest(unittest.TestCase):
     def test_proxy_thread_with_not_allowed_access(self, mock_get_dest_socket, mock_pipe):
         mock_src_socket = Mock()
         src_address = ("111.0.0.1", 8000)
-        mock_src_socket.recv.return_value = (
+        mock_src_socket.recv.side_effect = iter([(
             b'POST http://127.1.0.1/ HTTP/1.1\r\n'
             b'Host: 127.1.0.1\r\n'
             b'Content-Length: 17\r\n'
             b'Content-Type: application/json\r\n'
             b'\r\n'
             b'{"test": "value"}'
-        )
+        ), socket.timeout])
         self.proxy_server.proxy_thread(mock_src_socket, src_address)
         self.assertEqual(mock_get_dest_socket.call_count, 0)
 
@@ -137,14 +137,14 @@ class ServerTest(unittest.TestCase):
     def test_proxy_thread_with_blocked_access(self, mock_get_dest_socket, mock_pipe):
         mock_src_socket = Mock()
         src_address = ("192.0.0.1", 8000)
-        mock_src_socket.recv.return_value = (
+        mock_src_socket.recv.side_effect = iter([(
             b'POST http://127.1.0.1/ HTTP/1.1\r\n'
             b'Host: 127.1.0.1\r\n'
             b'Content-Length: 17\r\n'
             b'Content-Type: application/json\r\n'
             b'\r\n'
             b'{"test": "value"}'
-        )
+        ), socket.timeout])
         self.proxy_server.proxy_thread(mock_src_socket, src_address)
         self.assertEqual(mock_get_dest_socket.call_count, 0)
 
@@ -153,13 +153,13 @@ class ServerTest(unittest.TestCase):
     def test_proxy_thread_with_forwarding(self, mock_get_dest_socket, mock_pipe):
         mock_src_socket = Mock()
         src_address = ("127.0.0.1", 8000)
-        mock_src_socket.recv.return_value = (
+        mock_src_socket.recv.side_effect = iter([(
             b'POST http://196.168.0.1/ HTTP/1.1\r\n'
             b'Host: 196.168.0.1\r\n'
             b'Content-Length: 17\r\n'
             b'Content-Type: application/json\r\n'
             b'\r\n'
             b'{"test": "value"}'
-        )
+        ), socket.timeout])
         self.proxy_server.proxy_thread(mock_src_socket, src_address)
         mock_get_dest_socket.assert_called_with("127.0.0.2", 80)
