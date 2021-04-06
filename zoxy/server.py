@@ -234,7 +234,7 @@ class ProxyServer:
         return self.__get_accesses_list(self._blocked_accesses)
 
     @blocked_accesses.setter
-    def blocked_accesses(self, blocked_access: List[List]) -> defaultdict:
+    def blocked_accesses(self, blocked_access: List[List]):
         blocked_accesses = self.__get_access_table(blocked_access)
         logger.debug(f"Initial blocked accessed: {blocked_accesses}")
         self._blocked_accesses = blocked_accesses
