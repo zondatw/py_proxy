@@ -26,7 +26,7 @@ class ProxyServer:
         self.__max_recv_len = 1024 * 1024 * 1
         self.__default_socket_timeout = 1
         self.__dest_connection_timeout = 1
-        self.__max_pipe_timeout = 4 // self.__dest_connection_timeout // 2
+        self.__max_pipe_timeout = 2 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
 
         # format: {ipaddress.ip_network: [port]}
