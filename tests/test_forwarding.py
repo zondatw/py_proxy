@@ -3,7 +3,7 @@ import unittest
 
 from zoxy.server import ProxyServer
 
-class ProxyServerAccessTest(unittest.TestCase):
+class ProxyServerForwardingTest(unittest.TestCase):
     def setUp(self):
         self.config = {
             "url": "0.0.0.0",
