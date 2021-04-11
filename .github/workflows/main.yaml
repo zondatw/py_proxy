@@ -16,11 +16,14 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install dependency
+        run: |
+          pip install -r requirements.txt
+      - name: Test
+        run: |
+          python -m unittest
       - name: Type checking
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade mypy
           mypy zoxy
-      - name: Test
-        run: |
-          python -m unittest

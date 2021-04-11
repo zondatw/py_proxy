@@ -3,6 +3,11 @@ import setuptools
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
+requirements = []
+with open("requirements.txt", "r") as fh:
+    for line in fh:
+        requirements.append(line.strip())
+
 setuptools.setup(
     name="zoxy",
     version="0.0.4",
@@ -25,7 +30,5 @@ setuptools.setup(
             "zoxy=zoxy.cli:main",
         ],
     },
-    install_requires=[
-        'mypy ; python_version<="3.7"',
-    ]
+    install_requires=requirements,
 )
