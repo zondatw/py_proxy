@@ -5,13 +5,12 @@ import ssl
 import threading
 import logging
 from collections import defaultdict
-from typing import List, Tuple, Optional, Union, Any
+from typing import List, Tuple, Optional
 from urllib.parse import urlparse
 from types import FrameType
-from typing import Dict, Any
 
 from .http import http_request_parse, http_response_parse, HTTPResponse
-from .typings import LoadBalancingDict
+from .typings import LoadBalancingDict, SelfLoadBalancingDict
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +24,10 @@ class ProxyServer:
         blocked_accesses: List[List] =[],
         forwarding: List[List] =[],
         load_balancing: dict ={
-            "frontend": [],
+            "frontend": ["", ""],
             "backend": [],
         },
     ):
-        logger.info(f"lb: {load_balancing}")
         self.__max_recv_len = 1024 * 1024 * 1
         self.__default_socket_timeout = 1
         self.__dest_connection_timeout = 1
@@ -367,19 +365,19 @@ class ProxyServer:
 
     @load_balancing.setter
     # TODO: Typing
-    def load_balancing(self, load_balancing):
+    def load_balancing(self, load_balancing: LoadBalancingDict):
         # TODO: lock read
         # TODO: lock write
         self._load_balancing = {
             "frontend": {
-                "ipaddress": "",
+                "ipaddress": None,
                 "port": "",
             },
             "backend": [
             ],
-        }
+        } # type: SelfLoadBalancingDict
         enable_flag = False
-        if load_balancing["frontend"]:
+        if load_balancing["frontend"] and load_balancing["frontend"] != ["", ""]:
             enable_flag = True
             self._load_balancing["frontend"]["ipaddress"] = ipaddress.ip_network(load_balancing["frontend"][0])
             self._load_balancing["frontend"]["port"] = load_balancing["frontend"][1]
@@ -402,7 +400,7 @@ class ProxyServer:
         dest_ip_address = ipaddress.ip_network(socket.gethostbyname(str(dest_domain)))
         load_balancing_domain, load_balancing_port = dest_domain, dest_port
         # TODO: lock read
-        if self._load_balancing["frontend"]["ipaddress"].supernet_of(dest_ip_address) and (
+        if self._load_balancing["frontend"]["ipaddress"] is not None and self._load_balancing["frontend"]["ipaddress"].supernet_of(dest_ip_address) and (
             self._load_balancing["frontend"]["port"] == "*" or str(dest_port) == self._load_balancing["frontend"]["port"]
         ):
             backend_access_count = [backend_setting["access_count"] for backend_setting in self._load_balancing["backend"]]

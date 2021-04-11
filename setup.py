@@ -25,4 +25,7 @@ setuptools.setup(
             "zoxy=zoxy.cli:main",
         ],
     },
+    install_requires=[
+        'mypy ; python_version<="3.7"',
+    ]
 )
