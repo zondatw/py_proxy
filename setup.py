@@ -24,7 +24,7 @@ setuptools.setup(
     ],
     keywords="proxy http",
     packages=["zoxy"],
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     entry_points={
         "console_scripts": [
             "zoxy=zoxy.cli:main",
