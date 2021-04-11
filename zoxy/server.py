@@ -135,6 +135,7 @@ class ProxyServer:
 
         # parse url
         dest_domain, dest_port = self._parse_dest_url(dest_url)
+        org_dest_domain, org_dest_port = dest_domain, dest_port
 
         if self.__enable_forwarding:
             dest_domain, dest_port = self.get_forwarding_dest(dest_domain, dest_port)
@@ -150,6 +151,7 @@ class ProxyServer:
 
         dest_socket = None
         try:
+            request = request.replace(f"{org_dest_domain}:{org_dest_port}".encode(), f"{dest_domain}:{dest_port}".encode())
             dest_socket = self.get_dest_socket(dest_domain, dest_port)
             self.pipe(src_socket, request, dest_socket, is_https_tunnel)
         except socket.timeout:
