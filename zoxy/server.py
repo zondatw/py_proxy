@@ -15,6 +15,7 @@ from .typings import LoadBalancingDict, SelfLoadBalancingDict
 logger = logging.getLogger(__name__)
 
 
+
 class ProxyServer:
     def __init__(
         self,
@@ -33,6 +34,7 @@ class ProxyServer:
         self.__dest_connection_timeout = 1
         self.__max_pipe_timeout = 2 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
+        self.__lb_condition_lock = threading.Condition()
 
         # filter controll flag
         self.__enable_blocked_access = False
@@ -138,7 +140,13 @@ class ProxyServer:
             dest_domain, dest_port = self.get_forwarding_dest(dest_domain, dest_port)
 
         if self.__enable_load_balancing:
+            logger.debug(f"Ready to get lock: {dest_domain} {dest_port}")
+            self.__lb_condition_lock.acquire()
             dest_domain, dest_port = self.get_load_balancing_dest(dest_domain, dest_port)
+            self.__lb_condition_lock.notify()
+            logger.debug(f"Notify: {dest_domain} {dest_port}")
+            self.__lb_condition_lock.release()
+            logger.debug(f"Release: {dest_domain} {dest_port}")
 
         dest_socket = None
         try:
@@ -172,6 +180,7 @@ class ProxyServer:
             pass
 
     def get_dest_socket(self, dest_domain: Optional[str], dest_port: Optional[int]) -> socket.socket:
+        logger.info(f"Get dest {dest_domain}:{dest_port}")
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         dest_socket.connect((dest_domain, dest_port))
         dest_socket.settimeout(self.__dest_connection_timeout)
@@ -364,10 +373,8 @@ class ProxyServer:
         return load_balancing
 
     @load_balancing.setter
-    # TODO: Typing
     def load_balancing(self, load_balancing: LoadBalancingDict):
-        # TODO: lock read
-        # TODO: lock write
+        self.__lb_condition_lock.acquire()
         self._load_balancing = {
             "frontend": {
                 "ipaddress": None,
@@ -393,26 +400,22 @@ class ProxyServer:
                 })
 
         self.__enable_load_balancing = enable_flag
-        # TODO: release write
-        # TODO: release read
+        self.__lb_condition_lock.notify()
+        self.__lb_condition_lock.release()
 
     def get_load_balancing_dest(self, dest_domain: Optional[str], dest_port: Optional[int]) -> Tuple[Optional[str], Optional[int]]:
         dest_ip_address = ipaddress.ip_network(socket.gethostbyname(str(dest_domain)))
         load_balancing_domain, load_balancing_port = dest_domain, dest_port
-        # TODO: lock read
         if self._load_balancing["frontend"]["ipaddress"] is not None and self._load_balancing["frontend"]["ipaddress"].supernet_of(dest_ip_address) and (
             self._load_balancing["frontend"]["port"] == "*" or str(dest_port) == self._load_balancing["frontend"]["port"]
         ):
             backend_access_count = [backend_setting["access_count"] for backend_setting in self._load_balancing["backend"]]
             backend_access_rate = [backend_setting["access_rate"] for backend_setting in self._load_balancing["backend"]]
-            # TODO: race condition
             backend_index = self.distribute_backend(backend_access_count, backend_access_rate)
             load_balancing_domain = self._load_balancing["backend"][backend_index]["destination_ip"]
             load_balancing_port = int(self._load_balancing["backend"][backend_index]["destination_port"])
-            # TODO: lock write
             self._load_balancing["backend"][backend_index]["access_count"] += 1
-            # TODO: release write
-        # TODO: release read
+        logger.info(f"Load balancing {dest_domain}:{dest_port} to {load_balancing_domain}:{load_balancing_port}")
         return load_balancing_domain, load_balancing_port
 
     def distribute_backend(self, backend_access_count: List, backend_access_rate: List) -> int:
