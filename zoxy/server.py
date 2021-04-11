@@ -5,11 +5,13 @@ import ssl
 import threading
 import logging
 from collections import defaultdict
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union, Any
 from urllib.parse import urlparse
 from types import FrameType
+from typing import Dict, Any
 
 from .http import http_request_parse, http_response_parse, HTTPResponse
+from .typings import LoadBalancingDict
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +24,23 @@ class ProxyServer:
         allowed_accesses: List[List] =[],
         blocked_accesses: List[List] =[],
         forwarding: List[List] =[],
+        load_balancing: dict ={
+            "frontend": [],
+            "backend": [],
+        },
     ):
+        logger.info(f"lb: {load_balancing}")
         self.__max_recv_len = 1024 * 1024 * 1
         self.__default_socket_timeout = 1
         self.__dest_connection_timeout = 1
         self.__max_pipe_timeout = 2 // self.__dest_connection_timeout // 2
         self.__listen_flag = True
+
+        # filter controll flag
+        self.__enable_blocked_access = False
+        self.__enable_allowed_access = False
+        self.__enable_forwarding = False
+        self.__enable_load_balancing = False
 
         # format: {ipaddress.ip_network: [port]}
         self.allowed_accesses = allowed_accesses
@@ -42,6 +55,20 @@ class ProxyServer:
         #       "destination_port": str,
         # }]
         self.forwarding = forwarding
+
+        # fromat: {
+        #     "frontend": {
+        #         "ipaddress": ipaddress.ip_network,
+        #         "port": str,
+        #     },
+        #     "backend": [{
+        #         "destination_ip": str,
+        #         "destination_port": str,
+        #         "access_rate": int,
+        #         "access_count": int: default 0,
+        #     }],
+        # }
+        self.load_balancing = load_balancing
 
         socket.setdefaulttimeout(self.__default_socket_timeout)
 
@@ -111,6 +138,9 @@ class ProxyServer:
 
         if self.__enable_forwarding:
             dest_domain, dest_port = self.get_forwarding_dest(dest_domain, dest_port)
+
+        if self.__enable_load_balancing:
+            dest_domain, dest_port = self.get_load_balancing_dest(dest_domain, dest_port)
 
         dest_socket = None
         try:
@@ -316,3 +346,90 @@ class ProxyServer:
                     return True
         else:
             return False
+
+    @property
+    def load_balancing(self):
+        load_balancing = {
+            "frontend": ["", ""],
+            "backend": [],
+        }
+        if self.__enable_load_balancing:
+            load_balancing["frontend"][0] = str(self._load_balancing["frontend"]["ipaddress"])
+            load_balancing["frontend"][1] = self._load_balancing["frontend"]["port"]
+
+            for backend_setting in self._load_balancing["backend"]:
+                load_balancing["backend"].append([
+                    backend_setting["destination_ip"],
+                    backend_setting["destination_port"],
+                    str(int(backend_setting["access_rate"] * 100)),
+                ])
+        return load_balancing
+
+    @load_balancing.setter
+    # TODO: Typing
+    def load_balancing(self, load_balancing):
+        # TODO: lock read
+        # TODO: lock write
+        self._load_balancing = {
+            "frontend": {
+                "ipaddress": "",
+                "port": "",
+            },
+            "backend": [
+            ],
+        }
+        enable_flag = False
+        if load_balancing["frontend"]:
+            enable_flag = True
+            self._load_balancing["frontend"]["ipaddress"] = ipaddress.ip_network(load_balancing["frontend"][0])
+            self._load_balancing["frontend"]["port"] = load_balancing["frontend"][1]
+
+        if load_balancing["backend"]:
+            enable_flag = True
+            for backend_setting in load_balancing["backend"]:
+                self._load_balancing["backend"].append({
+                    "destination_ip": backend_setting[0],
+                    "destination_port": backend_setting[1],
+                    "access_rate": int(backend_setting[2]) / 100,
+                    "access_count": 0,
+                })
+
+        self.__enable_load_balancing = enable_flag
+        # TODO: release write
+        # TODO: release read
+
+    def get_load_balancing_dest(self, dest_domain: Optional[str], dest_port: Optional[int]) -> Tuple[Optional[str], Optional[int]]:
+        dest_ip_address = ipaddress.ip_network(socket.gethostbyname(str(dest_domain)))
+        load_balancing_domain, load_balancing_port = dest_domain, dest_port
+        # TODO: lock read
+        if self._load_balancing["frontend"]["ipaddress"].supernet_of(dest_ip_address) and (
+            self._load_balancing["frontend"]["port"] == "*" or str(dest_port) == self._load_balancing["frontend"]["port"]
+        ):
+            backend_access_count = [backend_setting["access_count"] for backend_setting in self._load_balancing["backend"]]
+            backend_access_rate = [backend_setting["access_rate"] for backend_setting in self._load_balancing["backend"]]
+            # TODO: race condition
+            backend_index = self.distribute_backend(backend_access_count, backend_access_rate)
+            load_balancing_domain = self._load_balancing["backend"][backend_index]["destination_ip"]
+            load_balancing_port = int(self._load_balancing["backend"][backend_index]["destination_port"])
+            # TODO: lock write
+            self._load_balancing["backend"][backend_index]["access_count"] += 1
+            # TODO: release write
+        # TODO: release read
+        return load_balancing_domain, load_balancing_port
+
+    def distribute_backend(self, backend_access_count: List, backend_access_rate: List) -> int:
+        total_backend_access = sum(backend_access_count)
+        min_rate_diff = float("-inf")
+        min_rate_diff_index = -1
+        for index, (current_backend_access_count, current_backend_access_rate) in enumerate(zip(backend_access_count, backend_access_rate)):
+            if total_backend_access != 0 and current_backend_access_count != 0:
+                rate = current_backend_access_count / total_backend_access
+                rate_diff = current_backend_access_rate - rate
+            else:
+                rate_diff = float("inf")
+            if rate_diff > min_rate_diff:
+                min_rate_diff = rate_diff
+                min_rate_diff_index = index
+
+        return min_rate_diff_index
+        

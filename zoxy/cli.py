@@ -37,6 +37,21 @@ def main():
         metavar=("original ip/mask", "original port", "destination ip", "destination port"),
         default=[],
     )
+    parser.add_argument(
+        "--lb_frontend",
+        help="Load balancing frontend",
+        nargs=2,
+        metavar=("frontend ip/mask", "frontend port"),
+        default=[],
+    )
+    parser.add_argument(
+        "--lb_backend",
+        help="Load balancing backend",
+        action="append",
+        nargs=3,
+        metavar=("backend ip/mask", "backend port", "access rate"),
+        default=[],
+    )
 
     args = parser.parse_args()
 
@@ -46,6 +61,10 @@ def main():
         "allowed_accesses": args.allowed_access,
         "blocked_accesses": args.blocked_access,
         "forwarding": args.forwarding,
+        "load_balancing": {
+            "frontend": args.lb_frontend,
+            "backend": args.lb_backend,
+        }
     }
     logger.debug(f"Proxy setting: {config}")
     ProxyServer(**config).listen()

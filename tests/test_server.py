@@ -94,6 +94,13 @@ class ServerTest(unittest.TestCase):
                 ["196.168.1.0/24", "1234", "127.0.0.1", "8000"],
                 ["196.168.0.0/24", "*", "127.0.0.2", "*"],
             ],
+            "load_balancing": {
+                "frontend": ["127.0.0.1/32", "8080"],
+                "backend": [
+                    ["127.0.0.1", "9090", "80"],
+                    ["127.0.0.1", "9091", "20"],
+                ],
+            },
         }
         self.proxy_server = ProxyServer(**self.config)
 
@@ -163,3 +170,33 @@ class ServerTest(unittest.TestCase):
         ), socket.timeout])
         self.proxy_server.proxy_thread(mock_src_socket, src_address)
         mock_get_dest_socket.assert_called_with("127.0.0.2", 80)
+
+    @patch("zoxy.server.ProxyServer.pipe", return_value=Mock())
+    @patch("zoxy.server.ProxyServer.get_dest_socket", return_value=Mock())
+    def test_proxy_thread_with_load_balancing(self, mock_get_dest_socket, mock_pipe):
+        mock_src_socket = Mock()
+        src_address = ("127.0.0.1", 8000)
+        mock_src_socket.recv.side_effect = iter([(
+            b'POST http://127.0.0.1:8080/ HTTP/1.1\r\n'
+            b'Host: 127.0.0.1\r\n'
+            b'Content-Length: 17\r\n'
+            b'Content-Type: application/json\r\n'
+            b'\r\n'
+            b'{"test": "value"}'
+        ), socket.timeout])
+        self.proxy_server.proxy_thread(mock_src_socket, src_address)
+        mock_get_dest_socket.assert_called_with("127.0.0.1", 9090)
+
+        mock_src_socket.reset_mock()
+        mock_get_dest_socket.reset_mock()
+        mock_pipe.reset_mock()
+        mock_src_socket.recv.side_effect = iter([(
+            b'POST http://127.0.0.1:8080/ HTTP/1.1\r\n'
+            b'Host: 127.0.0.1\r\n'
+            b'Content-Length: 17\r\n'
+            b'Content-Type: application/json\r\n'
+            b'\r\n'
+            b'{"test": "value"}'
+        ), socket.timeout])
+        self.proxy_server.proxy_thread(mock_src_socket, src_address)
+        mock_get_dest_socket.assert_called_with("127.0.0.1", 9091)
