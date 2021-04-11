@@ -1,11 +1,14 @@
 import ipaddress
 
 from typing import List, Union, Tuple
-from mypy_extensions import TypedDict  # <=3.7
 try:
-    from typing import TypedDict  # type: ignore # >=3.8
+    from mypy_extensions import TypedDict # <=3.7
 except ImportError:
-    from mypy_extensions import TypedDict  # <=3.7
+    pass
+try:
+    from typing import TypedDict # type: ignore # >=3.8
+except ImportError:
+    from mypy_extensions import TypedDict # <=3.7
 
 class LoadBalancingDict(TypedDict):
     frontend: Tuple[str, str]
