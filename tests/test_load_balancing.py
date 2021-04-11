@@ -97,7 +97,7 @@ class ProxyServerForwardingTest(unittest.TestCase):
                 "frontend": ["192.0.0.1/32", "8080"],
                 "backend": [
                     ["127.0.0.1", "9091", "20"],
-                    ["127.0.0.1", "9092", "80"],
+                    ["127.0.0.1", "*", "80"],
                 ],
             }
         # Original results do not forwarded
@@ -106,7 +106,7 @@ class ProxyServerForwardingTest(unittest.TestCase):
         self.assertEqual(forwarding_port, 8080)
 
         # New setting
-        for port in [9091, 9092, 9092, 9092, 9092, 9091, 9092, 9092, 9092, 9092]:
+        for port in [9091, 8080, 8080, 8080, 8080, 9091, 8080, 8080, 8080, 8080]:
             forwarding_domain, forwarding_port = self.proxy_server.get_load_balancing_dest("192.0.0.1", 8080)
             self.assertEqual(forwarding_domain, "127.0.0.1")
             self.assertEqual(forwarding_port, port)

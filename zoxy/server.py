@@ -388,6 +388,7 @@ class ProxyServer:
         enable_flag = False
         if load_balancing["frontend"] and load_balancing["frontend"] != ["", ""]:
             enable_flag = True
+            # TODO: socket.gethostbyname
             self._load_balancing["frontend"]["ipaddress"] = ipaddress.ip_network(load_balancing["frontend"][0])
             self._load_balancing["frontend"]["port"] = load_balancing["frontend"][1]
 
@@ -415,7 +416,9 @@ class ProxyServer:
             backend_access_rate = [backend_setting["access_rate"] for backend_setting in self._load_balancing["backend"]]
             backend_index = self.distribute_backend(backend_access_count, backend_access_rate)
             load_balancing_domain = self._load_balancing["backend"][backend_index]["destination_ip"]
-            load_balancing_port = int(self._load_balancing["backend"][backend_index]["destination_port"])
+            destination_port = self._load_balancing["backend"][backend_index]["destination_port"]
+            if destination_port != "*":
+                load_balancing_port = int(destination_port)
             self._load_balancing["backend"][backend_index]["access_count"] += 1
         logger.info(f"Load balancing {dest_domain}:{dest_port} to {load_balancing_domain}:{load_balancing_port}")
         return load_balancing_domain, load_balancing_port
