@@ -54,7 +54,7 @@ class ProxyServerForwardingTest(unittest.TestCase):
         }
         self.assertDictEqual(self.proxy_server._load_balancing, {
             "frontend": {
-                "ipaddress": "",
+                "ipaddress": None,
                 "port": "",
             },
             "backend": [
