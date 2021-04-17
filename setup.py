@@ -10,7 +10,7 @@ with open("requirements.txt", "r") as fh:
 
 setuptools.setup(
     name="zoxy",
-    version="0.0.4",
+    version="0.0.5",
     author="Zonda Yang",
     author_email="u226699@gmail.com",
     description="python proxy",
